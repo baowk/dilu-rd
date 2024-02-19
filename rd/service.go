@@ -1,8 +1,6 @@
 package rd
 
 import (
-	"fmt"
-
 	"github.com/baowk/dilu-rd/config"
 	"github.com/baowk/dilu-rd/driver/consul"
 	"github.com/baowk/dilu-rd/driver/etcd"
@@ -21,7 +19,6 @@ type RDClient interface {
 }
 
 func NewRDClient(cfg *config.Config, logger *zap.SugaredLogger) (client RDClient, err error) {
-	fmt.Println(cfg.Driver)
 	if cfg.Driver == "etcd" {
 		c := clientv3.Config{
 			Endpoints:   cfg.Endpoints,

@@ -18,7 +18,7 @@ var (
 	GrpcServiceName = "grpc-test-api"
 	ConsulDriver    = "consul"
 	EctdDriver      = "etcd"
-	Driver          = ConsulDriver
+	Driver          = EctdDriver
 
 	// scheme      = "http"
 )

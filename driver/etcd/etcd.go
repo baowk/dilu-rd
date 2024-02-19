@@ -33,11 +33,12 @@ func NewClient(cfg *clientv3.Config, logger *zap.SugaredLogger) (*EtcdClient, er
 		return nil, err
 	}
 	return &EtcdClient{
-		client:     client,
-		rwmutex:    sync.RWMutex{},
-		discovered: make(map[string][]*models.ServiceNode),
-		registered: make([]*models.ServiceNode, 0),
-		logger:     logger,
+		client:             client,
+		rwmutex:            sync.RWMutex{},
+		discovered:         make(map[string][]*models.ServiceNode),
+		registered:         make([]*models.ServiceNode, 0),
+		logger:             logger,
+		schedulingHandlers: make(map[string]scheduling.SchedulingHandler),
 	}, nil
 }
 
@@ -49,13 +50,14 @@ func (c *EtcdClient) Register(s *models.ServiceNode) error {
 		var curLeaseId clientv3.LeaseID = 0
 		for {
 			if curLeaseId == 0 {
-				leaseResp, err := lease.Grant(context.TODO(), 10)
+				leaseResp, err := lease.Grant(context.TODO(), int64(s.Timeout.Seconds()))
 				if err != nil {
 					c.logger.Error(err)
 					return
 				}
 
 				key := s.Name + fmt.Sprintf("%d", leaseResp.ID)
+				c.logger.Debug("key:", key)
 				b, err := json.Marshal(s)
 				if err != nil {
 					c.logger.Error(err)
@@ -66,13 +68,15 @@ func (c *EtcdClient) Register(s *models.ServiceNode) error {
 				}
 				curLeaseId = clientv3.LeaseID(leaseResp.ID)
 			} else {
+				c.logger.Debug("key:", curLeaseId)
 				// 续约租约，如果租约已经过期将curLeaseId复位到0重新走创建租约的逻辑
 				if _, err := lease.KeepAliveOnce(context.TODO(), curLeaseId); err == rpctypes.ErrLeaseNotFound {
+					c.logger.Error(err)
 					curLeaseId = 0
 					continue
 				}
 			}
-			time.Sleep(time.Duration(1) * time.Second)
+			time.Sleep(s.Interval)
 		}
 	}()
 	return err
@@ -89,20 +93,21 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 		watchChan := watcher.Watch(context.TODO(), s.Name, clientv3.WithPrefix())
 		for watchResp := range watchChan {
 			for _, event := range watchResp.Events {
-				c.logger.Info(event)
 				func() {
 					c.rwmutex.Lock()
+					c.logger.Info("Events ", s.Name, string(event.Kv.Value))
 					switch event.Type {
 					case mvccpb.PUT: //PUT事件，目录下有了新key
-						var rs *models.ServiceNode
-						err := json.Unmarshal(event.Kv.Value, rs)
+						var rs models.ServiceNode
+						err := json.Unmarshal(event.Kv.Value, &rs)
 						if err != nil {
-							c.logger.Error(err)
+							c.logger.Error("unmarshal err", err)
 						}
-						if vs, ok := c.discovered[string(event.Kv.Key)]; ok {
+						if vs, ok := c.discovered[s.Name]; ok {
 							found := false
 							for _, v := range vs {
 								if v.Id == rs.Id {
+									c.logger.Debug("-----update ", s.Name, rs)
 									v.Addr = rs.Addr
 									v.Port = rs.Port
 									v.Tags = rs.Tags
@@ -116,31 +121,36 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 								}
 							}
 							if !found {
+								c.logger.Debug("-----add other ", s.Name, rs)
 								rs.SetEnable(true)
 								rs.ClearFailCnt()
-								vs = append(vs, rs)
-								c.discovered[string(event.Kv.Key)] = vs
+								vs = append(vs, &rs)
+								c.discovered[s.Name] = vs
 							}
 						} else {
+							c.logger.Debug("-----add ", s.Name, rs)
 							rs.SetEnable(true)
 							rs.ClearFailCnt()
-							c.discovered[string(event.Kv.Key)] = []*models.ServiceNode{rs}
+							c.discovered[s.Name] = []*models.ServiceNode{&rs}
 						}
+						c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm, c.logger)
 					case mvccpb.DELETE: //DELETE事件，目录中有key被删掉(Lease过期，key 也会被删掉)
-						var rs *models.ServiceNode
-						err := json.Unmarshal(event.Kv.Value, rs)
-						if err != nil {
-							c.logger.Error(err)
-						}
-						if vs, ok := c.discovered[string(event.Kv.Key)]; ok {
+						// var rs models.ServiceNode
+						// err := json.Unmarshal(event.Kv.Value, &rs)
+						// if err != nil {
+						// 	c.logger.Error(err)
+						// }
+						curId := string(event.Kv.Value)
+						if vs, ok := c.discovered[s.Name]; ok {
 							for i, v := range vs {
-								if v.Id == rs.Id {
+								if v.Id == curId {
+									c.logger.Debug("-----del ", s.Name, curId)
 									v.Close()
 									vs = append(vs[:i], vs[i+1:]...)
 									break
 								}
 							}
-							c.discovered[string(event.Kv.Key)] = vs
+							c.discovered[s.Name] = vs
 						} else {
 							c.logger.Info("not found")
 						}
