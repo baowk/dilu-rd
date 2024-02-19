@@ -73,6 +73,7 @@ func grpcSayHello(rs *models.ServiceNode, logger *zap.SugaredLogger) {
 	r, err := c.SayHello(context.Background(), &service.HelloRequest{Name: "walker"})
 	if err != nil {
 		logger.Error("could not greet", zap.Error(err))
+		rs.IncrFailCnt()
 		return
 	}
 	logger.Info("Greeting: ", zap.String("msg", r.Message))

@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/baowk/dilu-rd/examples/config"
@@ -58,7 +62,38 @@ func main() {
 
 	logger.Debug("http start:", zap.String("ip", ips), zap.Int("port", 5000))
 
-	r.Run(":5000")
+	//服务启动参数
+	srv := &http.Server{
+		Addr:    "0.0.0.0:5000",
+		Handler: r,
+	}
+
+	//启动服务
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("listen: ", err)
+		}
+	}()
+
+	//r.Run(":5000")
+
+	// 等待中断信号以优雅地关闭服务器（设置 5 秒的超时时间）
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	logger.Info("Shutdown Server " + time.Now().String())
+
+	for _, ns := range cfg.ServiceNodes {
+		rdclient.Deregister(ns)
+	}
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server Shutdown:", err)
+	}
+	log.Println("Server exiting")
 }
 
 func GetLocalHost() string {
