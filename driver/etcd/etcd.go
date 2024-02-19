@@ -88,6 +88,19 @@ func (c *EtcdClient) Deregister(s *models.ServiceNode) error {
 
 func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 	go func() {
+		func() {
+			kv := clientv3.NewKV(c.client)
+			rangeResp, err := kv.Get(context.TODO(), s.Name, clientv3.WithPrefix())
+			if err != nil {
+				c.logger.Error("GetKey err:", err)
+			}
+			c.rwmutex.Lock()
+			defer c.rwmutex.Unlock()
+			for _, kv := range rangeResp.Kvs {
+				c.PutServiceNode(kv.Value, s)
+			}
+		}()
+
 		watcher := clientv3.NewWatcher(c.client)
 		// Watch 服务目录下的更新
 		watchChan := watcher.Watch(context.TODO(), s.Name, clientv3.WithPrefix())
@@ -98,42 +111,7 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 					c.logger.Info("Events ", s.Name, string(event.Kv.Value))
 					switch event.Type {
 					case mvccpb.PUT: //PUT事件，目录下有了新key
-						var rs models.ServiceNode
-						err := json.Unmarshal(event.Kv.Value, &rs)
-						if err != nil {
-							c.logger.Error("unmarshal err", err)
-						}
-						if vs, ok := c.discovered[s.Name]; ok {
-							found := false
-							for _, v := range vs {
-								if v.Id == rs.Id {
-									c.logger.Debug("-----update ", s.Name, rs)
-									v.Addr = rs.Addr
-									v.Port = rs.Port
-									v.Tags = rs.Tags
-									v.Weight = rs.Weight
-									v.Namespace = rs.Namespace
-									v.Protocol = rs.Protocol
-									v.SetEnable(true)
-									v.ClearFailCnt()
-									found = true
-									break
-								}
-							}
-							if !found {
-								c.logger.Debug("-----add other ", s.Name, rs)
-								rs.SetEnable(true)
-								rs.ClearFailCnt()
-								vs = append(vs, &rs)
-								c.discovered[s.Name] = vs
-							}
-						} else {
-							c.logger.Debug("-----add ", s.Name, rs)
-							rs.SetEnable(true)
-							rs.ClearFailCnt()
-							c.discovered[s.Name] = []*models.ServiceNode{&rs}
-						}
-						c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm, c.logger)
+						c.PutServiceNode(event.Kv.Value, s)
 					case mvccpb.DELETE: //DELETE事件，目录中有key被删掉(Lease过期，key 也会被删掉)
 						// var rs models.ServiceNode
 						// err := json.Unmarshal(event.Kv.Value, &rs)
@@ -161,6 +139,45 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 		}
 	}()
 	return nil
+}
+
+func (c *EtcdClient) PutServiceNode(data []byte, s *config.DiscoveryNode) {
+	var rs models.ServiceNode
+	err := json.Unmarshal(data, &rs)
+	if err != nil {
+		c.logger.Error("unmarshal err", err)
+	}
+	if vs, ok := c.discovered[s.Name]; ok {
+		found := false
+		for _, v := range vs {
+			if v.Id == rs.Id {
+				c.logger.Debug("-----update ", s.Name, rs)
+				v.Addr = rs.Addr
+				v.Port = rs.Port
+				v.Tags = rs.Tags
+				v.Weight = rs.Weight
+				v.Namespace = rs.Namespace
+				v.Protocol = rs.Protocol
+				v.SetEnable(true)
+				v.ClearFailCnt()
+				found = true
+				break
+			}
+		}
+		if !found {
+			c.logger.Debug("-----add other ", s.Name, rs)
+			rs.SetEnable(true)
+			rs.ClearFailCnt()
+			vs = append(vs, &rs)
+			c.discovered[s.Name] = vs
+		}
+	} else {
+		c.logger.Debug("-----add ", s.Name, rs)
+		rs.SetEnable(true)
+		rs.ClearFailCnt()
+		c.discovered[s.Name] = []*models.ServiceNode{&rs}
+	}
+	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm, c.logger)
 }
 
 func (c *EtcdClient) GetService(name string, clientIp string) (*models.ServiceNode, error) {
