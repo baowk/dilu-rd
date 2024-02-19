@@ -14,47 +14,18 @@ type SchedulingHandler interface {
 func GetHandler(algorithm string, logger *zap.SugaredLogger) SchedulingHandler {
 	algo := Algorithm(algorithm)
 	switch algo {
+	case AlgorithmRoundRobin:
+		return impl.NewRoundRobinHandler(logger)
 	case AlgorithmRandom:
 		return impl.NewRandomHandler(logger)
-	case AlgorithmRoundRobin:
-		return impl.NewRoundHandler(logger)
 	// case AlgorithmWeightedRandom:
 	// 	return NewWeightedRandomHandler()
 	// case AlgorithmIpHash:
 	// 	return NewIpHashHandler()
 	default:
-		return impl.NewRoundHandler(logger)
+		return impl.NewRoundRobinHandler(logger)
 	}
 }
-
-// func Scheduling(nodes []*models.ServiceNode, algorithm Algorithm) *models.ServiceNode {
-// 	if len(nodes) == 0 {
-// 		return nil
-// 	}
-// 	if len(nodes) == 1 {
-// 		if nodes[0].Enable() {
-// 			return nodes[0]
-// 		}
-// 		return nil
-// 	}
-// 	switch algorithm {
-// 	case AlgorithmRandom:
-// 		return nodes[0]
-// 	case AlgorithmRoundRobin:
-// 		return nodes[0]
-// 	// case AlgorithmWeightedRandom:
-// 	// 	return nodes[0]
-// 	// case AlgorithmIpHash:
-// 	// 	return nodes[0]
-// 	default:
-// 		for _, node := range nodes {
-// 			if node.Enable() {
-// 				return node
-// 			}
-// 		}
-// 	}
-// 	return nil
-// }
 
 type Algorithm string
 

@@ -6,19 +6,19 @@ import (
 	"go.uber.org/zap"
 )
 
-type RoundHandler struct {
+type RoundRobinHandler struct {
 	cur    map[string]int
 	logger *zap.SugaredLogger
 }
 
-func NewRoundHandler(logger *zap.SugaredLogger) *RoundHandler {
-	return &RoundHandler{
+func NewRoundRobinHandler(logger *zap.SugaredLogger) *RoundRobinHandler {
+	return &RoundRobinHandler{
 		cur:    make(map[string]int),
 		logger: logger,
 	}
 }
 
-func (r *RoundHandler) GetServiceNode(nodes []*models.ServiceNode, name string) *models.ServiceNode {
+func (r *RoundRobinHandler) GetServiceNode(nodes []*models.ServiceNode, name string) *models.ServiceNode {
 	if len(nodes) == 0 {
 		return nil
 	}
