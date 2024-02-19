@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
@@ -25,44 +23,29 @@ func main() {
 		panic(err)
 	}
 	for {
-		if len(cfg.Discoveries) > 0 {
-			for i := 0; i < len(cfg.Discoveries); i++ {
-				rs, err := rdclient.GetService(cfg.Discoveries[i].Name, "")
-				if err != nil {
-					fmt.Println(err)
-					time.Sleep(time.Duration(3 * time.Second))
-					continue
-				}
-				if rs != nil {
-					logger.Info("service", zap.Any("name", *rs))
-					if rs.Protocol == "http" {
-						Get(rs, logger.Sugar())
-					} else {
-						fmt.Println("grpc")
-						conn, err := rs.GetGrpcConn()
-						if err != nil {
-							logger.Error("get conn", zap.Error(err))
-							return
-						}
-						c := service.NewGreeterClient(conn)
-
-						r, err := c.SayHello(context.Background(), &service.HelloRequest{Name: "walker"})
-						if err != nil {
-							log.Println("could not greet", err)
-							return
-						}
-						log.Println("Greeting: ", r.Message)
-					}
+		for i := 0; i < len(cfg.Discoveries); i++ {
+			rs, err := rdclient.GetService(cfg.Discoveries[i].Name, "")
+			if err != nil {
+				logger.Error("GetService", zap.Error(err))
+				time.Sleep(time.Duration(3 * time.Second))
+				continue
+			}
+			if rs != nil {
+				logger.Info("service", zap.Any("name", *rs))
+				if rs.Protocol == "http" {
+					httpPing(rs, logger.Sugar())
 				} else {
-					logger.Error("no service", zap.Any("name", cfg.Discoveries[0].Name))
+					grpcSayHello(rs, logger.Sugar())
 				}
+			} else {
+				logger.Error("no service", zap.Any("name", cfg.Discoveries[0].Name))
 			}
 		}
 		time.Sleep(time.Duration(800 * time.Millisecond))
 	}
 }
 
-func Get(rs *models.ServiceNode, logger *zap.SugaredLogger) {
+func httpPing(rs *models.ServiceNode, logger *zap.SugaredLogger) {
 	url := rs.GetUrl() + "/ping"
 	resp, err := http.Get(url)
 	if err != nil {
@@ -76,5 +59,21 @@ func Get(rs *models.ServiceNode, logger *zap.SugaredLogger) {
 		logger.Error(err)
 		return
 	}
-	fmt.Println(string(b))
+	logger.Info(string(b))
+}
+
+func grpcSayHello(rs *models.ServiceNode, logger *zap.SugaredLogger) {
+	conn, err := rs.GetGrpcConn()
+	if err != nil {
+		logger.Error("get conn", zap.Error(err))
+		return
+	}
+	c := service.NewGreeterClient(conn)
+
+	r, err := c.SayHello(context.Background(), &service.HelloRequest{Name: "walker"})
+	if err != nil {
+		logger.Error("could not greet", zap.Error(err))
+		return
+	}
+	logger.Info("Greeting: ", zap.String("msg", r.Message))
 }
