@@ -55,8 +55,7 @@ func (c *EtcdClient) Register(s *models.ServiceNode) error {
 					c.logger.Error(err)
 					return
 				}
-
-				key := s.Name + fmt.Sprintf("%d", leaseResp.ID)
+				key := fmt.Sprintf("%s%d", s.Name, leaseResp.ID)
 				c.logger.Debug("key:", key)
 				b, err := json.Marshal(s)
 				if err != nil {
@@ -110,7 +109,6 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 		watchChan := watcher.Watch(context.TODO(), s.Name, clientv3.WithPrefix())
 		for watchResp := range watchChan {
 			for _, event := range watchResp.Events {
-				c.rwmutex.Lock()
 				c.logger.Info("Events ", s.Name, string(event.Kv.Value))
 				switch event.Type {
 				case mvccpb.PUT: //PUT事件，目录下有了新key
