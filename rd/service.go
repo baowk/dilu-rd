@@ -13,7 +13,7 @@ import (
 
 type RDClient interface {
 	Register(s *models.ServiceNode) error
-	Deregister(s *models.ServiceNode) error
+	Deregister()
 	Watch(s *config.DiscoveryNode) error
 	GetService(name string, clientIp string) (*models.ServiceNode, error)
 }

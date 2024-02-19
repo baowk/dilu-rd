@@ -86,9 +86,7 @@ func main() {
 	defer cancel()
 	logger.Info("Shutdown Server " + time.Now().String())
 
-	for _, ns := range cfg.ServiceNodes {
-		rdclient.Deregister(ns)
-	}
+	rdclient.Deregister()
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server Shutdown:", err)

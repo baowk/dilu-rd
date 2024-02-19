@@ -75,15 +75,19 @@ func (c *ConsulClient) Register(s *models.ServiceNode) error {
 		c.logger.Error("register err", zap.Error(err))
 		return err
 	}
+	c.registered = append(c.registered, s)
 	return nil
 }
 
-func (c *ConsulClient) Deregister(r *models.ServiceNode) error {
-	return c.client.Agent().ServiceDeregister(r.Id)
+func (c *ConsulClient) Deregister() {
+	for _, r := range c.registered {
+		c.client.Agent().ServiceDeregister(r.Id)
+	}
 }
 
 func (c *ConsulClient) Watch(s *config.DiscoveryNode) error {
 	var lastIndex uint64 = 0
+	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm, c.logger)
 	go func(s *config.DiscoveryNode) {
 		for {
 			entries, qmeta, err := c.client.Health().Service(s.Name, s.Tag, false, &api.QueryOptions{
@@ -95,67 +99,18 @@ func (c *ConsulClient) Watch(s *config.DiscoveryNode) error {
 				time.Sleep(time.Second * 1)
 				continue
 			}
-			//fmt.Println(entries, qmeta, err)
 			lastIndex = qmeta.LastIndex
 			c.logger.Debug("watch", zap.Any("entries", entries), zap.Any("qmeta", qmeta))
 			for _, entry := range entries {
-				flag := 0
 				status := entry.Checks.AggregatedStatus()
 				c.logger.Debug("watch", zap.Any("-------status--", status), zap.Any("entry.Service.ID--------", entry.Service.ID))
 				switch status {
 				case api.HealthPassing:
-					flag = 1 // 正常
+					c.putServiceNode(s, entry)
 				//case api.HealthMaint, api.HealthCritical, api.HealthWarning:
 				default:
-					flag = 2 // 删除
+					c.delServiceNode(s, entry)
 				}
-				func() {
-					c.rwmutex.Lock()
-					if flag == 1 { // 新增
-						if vs, ok := c.discovered[s.Name]; ok {
-							found := false
-							for _, v := range vs {
-								if v.Id == entry.Service.ID {
-									c.logger.Debug("watch", zap.Any("-------status--", status), zap.Any("update---", entry.Service.ID))
-									found = true
-									v.Addr = entry.Service.Address
-									v.Port = entry.Service.Port
-									v.Protocol = models.Protocol(entry.Service.Meta["protocol"])
-									v.Namespace = entry.Service.Namespace
-									v.Tags = entry.Service.Tags
-									v.SetEnable(true)
-									v.ClearFailCnt()
-									break
-								}
-							}
-							if !found {
-								c.logger.Debug("watch", zap.Any("-------status--", status), zap.Any("add reset---", entry.Service.ID))
-								ds := c.entryToServiceNode(entry, s)
-								vs = append(vs, ds)
-								c.discovered[s.Name] = vs
-							}
-						} else {
-							c.logger.Debug("watch", zap.Any("-------status--", status), zap.Any("add 1---", entry.Service.ID))
-							ds := c.entryToServiceNode(entry, s)
-							c.discovered[s.Name] = []*models.ServiceNode{ds}
-						}
-					} else {
-						c.logger.Debug("watch", zap.Any("-------status--", status), zap.Any("entry.Service.ID-----del---", entry.Service.ID))
-						if vs, ok := c.discovered[s.Name]; ok {
-							for i, v := range vs {
-								if v.Id == entry.Service.ID {
-									v.Close()
-									vs = append(vs[:i], vs[i+1:]...)
-									break
-								}
-							}
-							c.discovered[s.Name] = vs
-						} else {
-							c.logger.Debug("not found")
-						}
-					}
-					defer c.rwmutex.Unlock()
-				}()
 			}
 			time.Sleep(time.Second * time.Duration(s.RetryTime))
 		}
@@ -174,6 +129,56 @@ func (c *ConsulClient) GetService(name string, clientIp string) (*models.Service
 	return nil, errors.New("no service")
 }
 
+func (c *ConsulClient) putServiceNode(s *config.DiscoveryNode, entry *api.ServiceEntry) {
+	c.rwmutex.Lock()
+	defer c.rwmutex.Unlock()
+	if vs, ok := c.discovered[s.Name]; ok {
+		found := false
+		for _, v := range vs {
+			if v.Id == entry.Service.ID {
+				c.logger.Debug("watch", zap.Any("update---", entry.Service.ID))
+				found = true
+				v.Addr = entry.Service.Address
+				v.Port = entry.Service.Port
+				v.Protocol = models.Protocol(entry.Service.Meta["protocol"])
+				v.Namespace = entry.Service.Namespace
+				v.Tags = entry.Service.Tags
+				v.SetEnable(true)
+				v.ClearFailCnt()
+				break
+			}
+		}
+		if !found {
+			c.logger.Debug("watch", zap.Any("add reset---", entry.Service.ID))
+			ds := c.entryToServiceNode(entry, s)
+			vs = append(vs, ds)
+			c.discovered[s.Name] = vs
+		}
+	} else {
+		c.logger.Debug("watch", zap.Any("add 1---", entry.Service.ID))
+		ds := c.entryToServiceNode(entry, s)
+		c.discovered[s.Name] = []*models.ServiceNode{ds}
+	}
+}
+
+func (c *ConsulClient) delServiceNode(s *config.DiscoveryNode, entry *api.ServiceEntry) {
+	c.rwmutex.Lock()
+	defer c.rwmutex.Unlock()
+	c.logger.Debug("watch", zap.Any("entry.Service.ID-----del---", entry.Service.ID))
+	if vs, ok := c.discovered[s.Name]; ok {
+		for i, v := range vs {
+			if v.Id == entry.Service.ID {
+				v.Close()
+				vs = append(vs[:i], vs[i+1:]...)
+				break
+			}
+		}
+		c.discovered[s.Name] = vs
+	} else {
+		c.logger.Debug("not found")
+	}
+}
+
 func (c *ConsulClient) entryToServiceNode(entry *api.ServiceEntry, s *config.DiscoveryNode) *models.ServiceNode {
 	n := models.ServiceNode{
 		Id:        entry.Service.ID,
@@ -186,6 +191,6 @@ func (c *ConsulClient) entryToServiceNode(entry *api.ServiceEntry, s *config.Dis
 		FailLimit: s.FailLimit,
 	}
 	n.SetEnable(true)
-	c.schedulingHandlers[n.Name] = scheduling.GetHandler(s.SchedulingAlgorithm, c.logger)
+
 	return &n
 }

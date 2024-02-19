@@ -21,7 +21,7 @@ import (
 type EtcdClient struct {
 	client             *clientv3.Client
 	rwmutex            sync.RWMutex
-	registered         []*models.ServiceNode
+	registered         map[string]*models.ServiceNode
 	discovered         map[string][]*models.ServiceNode //已发现的服务
 	logger             *zap.SugaredLogger
 	schedulingHandlers map[string]scheduling.SchedulingHandler
@@ -36,7 +36,7 @@ func NewClient(cfg *clientv3.Config, logger *zap.SugaredLogger) (*EtcdClient, er
 		client:             client,
 		rwmutex:            sync.RWMutex{},
 		discovered:         make(map[string][]*models.ServiceNode),
-		registered:         make([]*models.ServiceNode, 0),
+		registered:         make(map[string]*models.ServiceNode),
 		logger:             logger,
 		schedulingHandlers: make(map[string]scheduling.SchedulingHandler),
 	}, nil
@@ -66,6 +66,7 @@ func (c *EtcdClient) Register(s *models.ServiceNode) error {
 					c.logger.Error(err)
 					return
 				}
+				c.registered[key] = s
 				curLeaseId = clientv3.LeaseID(leaseResp.ID)
 			} else {
 				c.logger.Debug("key:", curLeaseId)
@@ -82,8 +83,11 @@ func (c *EtcdClient) Register(s *models.ServiceNode) error {
 	return err
 }
 
-func (c *EtcdClient) Deregister(s *models.ServiceNode) error {
-	return nil
+func (c *EtcdClient) Deregister() {
+	kv := clientv3.NewKV(c.client)
+	for k, _ := range c.registered {
+		kv.Delete(context.TODO(), k)
+	}
 }
 
 func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
@@ -97,7 +101,7 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 			c.rwmutex.Lock()
 			defer c.rwmutex.Unlock()
 			for _, kv := range rangeResp.Kvs {
-				c.PutServiceNode(kv.Value, s)
+				c.putServiceNode(kv.Value, s)
 			}
 		}()
 
@@ -106,42 +110,23 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 		watchChan := watcher.Watch(context.TODO(), s.Name, clientv3.WithPrefix())
 		for watchResp := range watchChan {
 			for _, event := range watchResp.Events {
-				func() {
-					c.rwmutex.Lock()
-					c.logger.Info("Events ", s.Name, string(event.Kv.Value))
-					switch event.Type {
-					case mvccpb.PUT: //PUT事件，目录下有了新key
-						c.PutServiceNode(event.Kv.Value, s)
-					case mvccpb.DELETE: //DELETE事件，目录中有key被删掉(Lease过期，key 也会被删掉)
-						// var rs models.ServiceNode
-						// err := json.Unmarshal(event.Kv.Value, &rs)
-						// if err != nil {
-						// 	c.logger.Error(err)
-						// }
-						curId := string(event.Kv.Value)
-						if vs, ok := c.discovered[s.Name]; ok {
-							for i, v := range vs {
-								if v.Id == curId {
-									c.logger.Debug("-----del ", s.Name, curId)
-									v.Close()
-									vs = append(vs[:i], vs[i+1:]...)
-									break
-								}
-							}
-							c.discovered[s.Name] = vs
-						} else {
-							c.logger.Info("not found")
-						}
-					}
-					defer c.rwmutex.Unlock()
-				}()
+				c.rwmutex.Lock()
+				c.logger.Info("Events ", s.Name, string(event.Kv.Value))
+				switch event.Type {
+				case mvccpb.PUT: //PUT事件，目录下有了新key
+					c.putServiceNode(event.Kv.Value, s)
+				case mvccpb.DELETE: //DELETE事件，目录中有key被删掉(Lease过期，key 也会被删掉)
+					c.delServiceNode(string(event.Kv.Key), s)
+				}
 			}
 		}
 	}()
 	return nil
 }
 
-func (c *EtcdClient) PutServiceNode(data []byte, s *config.DiscoveryNode) {
+func (c *EtcdClient) putServiceNode(data []byte, s *config.DiscoveryNode) {
+	c.rwmutex.Lock()
+	defer c.rwmutex.Unlock()
 	var rs models.ServiceNode
 	err := json.Unmarshal(data, &rs)
 	if err != nil {
@@ -172,12 +157,30 @@ func (c *EtcdClient) PutServiceNode(data []byte, s *config.DiscoveryNode) {
 			c.discovered[s.Name] = vs
 		}
 	} else {
-		c.logger.Debug("-----add ", s.Name, rs)
+		c.logger.Debug("-----add first", s.Name, rs)
 		rs.SetEnable(true)
 		rs.ClearFailCnt()
 		c.discovered[s.Name] = []*models.ServiceNode{&rs}
 	}
 	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm, c.logger)
+}
+
+func (c *EtcdClient) delServiceNode(curId string, s *config.DiscoveryNode) {
+	c.rwmutex.RLock()
+	defer c.rwmutex.RUnlock()
+	if vs, ok := c.discovered[s.Name]; ok {
+		for i, v := range vs {
+			if v.Id == curId {
+				c.logger.Debug("-----del ", s.Name, curId)
+				v.Close()
+				vs = append(vs[:i], vs[i+1:]...)
+				break
+			}
+		}
+		c.discovered[s.Name] = vs
+	} else {
+		c.logger.Info("not found")
+	}
 }
 
 func (c *EtcdClient) GetService(name string, clientIp string) (*models.ServiceNode, error) {
