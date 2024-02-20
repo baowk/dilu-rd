@@ -81,6 +81,7 @@ func GetDisConfig() *config.Config {
 		Driver:    Driver,
 		Discoveries: []*config.DiscoveryNode{
 			&config.DiscoveryNode{
+				Enable: true,
 				//SchedulingAlgorithm: "random",
 				Name:      ServiceName,
 				FailLimit: 3,
@@ -88,6 +89,7 @@ func GetDisConfig() *config.Config {
 				//Tag:  "dev",
 			},
 			&config.DiscoveryNode{
+				Enable: true,
 				//SchedulingAlgorithm: "random",
 				Name:      GrpcServiceName,
 				FailLimit: 3,

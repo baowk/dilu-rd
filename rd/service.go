@@ -43,9 +43,11 @@ func NewRDClient(cfg *config.Config, logger *zap.SugaredLogger) (client RDClient
 		}
 	}
 	for _, ds := range cfg.Discoveries {
-		err = client.Watch(ds)
-		if err != nil {
-			return
+		if ds.Enable {
+			err = client.Watch(ds)
+			if err != nil {
+				return
+			}
 		}
 	}
 	return

@@ -97,8 +97,6 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 			if err != nil {
 				c.logger.Error("GetKey err:", err)
 			}
-			c.rwmutex.Lock()
-			defer c.rwmutex.Unlock()
 			for _, kv := range rangeResp.Kvs {
 				c.putServiceNode(kv.Value, s)
 			}
@@ -125,6 +123,7 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 func (c *EtcdClient) putServiceNode(data []byte, s *config.DiscoveryNode) {
 	c.rwmutex.Lock()
 	defer c.rwmutex.Unlock()
+	c.logger.Debug("-----put ", s.Name, string(data))
 	var rs models.ServiceNode
 	err := json.Unmarshal(data, &rs)
 	if err != nil {
@@ -166,6 +165,7 @@ func (c *EtcdClient) putServiceNode(data []byte, s *config.DiscoveryNode) {
 func (c *EtcdClient) delServiceNode(curId string, s *config.DiscoveryNode) {
 	c.rwmutex.RLock()
 	defer c.rwmutex.RUnlock()
+	c.logger.Debug("-----del ", s.Name, curId)
 	if vs, ok := c.discovered[s.Name]; ok {
 		for i, v := range vs {
 			if v.Id == curId {
@@ -184,6 +184,7 @@ func (c *EtcdClient) delServiceNode(curId string, s *config.DiscoveryNode) {
 func (c *EtcdClient) GetService(name string, clientIp string) (*models.ServiceNode, error) {
 	c.rwmutex.RLock()
 	defer c.rwmutex.RUnlock()
+	c.logger.Debug("-----get ", name)
 	if rs, ok := c.discovered[name]; ok && len(rs) > 0 {
 		if sh, ok := c.schedulingHandlers[name]; ok {
 			return sh.GetServiceNode(rs, name), nil
