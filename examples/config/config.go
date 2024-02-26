@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/baowk/dilu-rd/config"
-	"github.com/baowk/dilu-rd/models"
 )
 
 var (
@@ -18,7 +17,7 @@ var (
 	GrpcServiceName = "grpc-test-api"
 	ConsulDriver    = "consul"
 	EctdDriver      = "etcd"
-	Driver          = EctdDriver
+	Driver          = ConsulDriver
 
 	// scheme      = "http"
 )
@@ -40,32 +39,32 @@ func GetConfig() *config.Config {
 		Timeout:   time.Duration(10) * time.Second,
 		Enable:    true,
 		Driver:    Driver,
-		ServiceNodes: []*models.ServiceNode{
-			&models.ServiceNode{
+		Registers: []*config.RegisterNode{
+			&config.RegisterNode{
 				//Namespace: "dilu",
-				Name:      ServiceName,
-				Addr:      serverAddr,
-				Port:      serverPort,
-				Protocol:  "http",
-				HealthUrl: fmt.Sprintf("http://%s:%d/api/health", serverAddr, serverPort),
-				Tags:      []string{"dev"},
-				Interval:  5 * time.Second,
-				Weight:    100,
-				Timeout:   10 * time.Second,
-				Id:        fmt.Sprintf("%s:%d", serverAddr, serverPort),
+				Name:        ServiceName,
+				Addr:        serverAddr,
+				Port:        serverPort,
+				Protocol:    "http",
+				HealthCheck: fmt.Sprintf("http://%s:%d/api/health", serverAddr, serverPort),
+				Tags:        []string{"dev"},
+				Interval:    5 * time.Second,
+				Weight:      100,
+				Timeout:     10 * time.Second,
+				Id:          fmt.Sprintf("%s:%d", serverAddr, serverPort),
 			},
-			&models.ServiceNode{
+			&config.RegisterNode{
 				//Namespace: "dilu",
-				Name:      GrpcServiceName,
-				Addr:      serverAddr,
-				Port:      GrpcPort,
-				Protocol:  "grpc",
-				HealthUrl: fmt.Sprintf("%s:%d/Health", serverAddr, GrpcPort),
-				Tags:      []string{"dev"},
-				Interval:  5 * time.Second,
-				Weight:    100,
-				Timeout:   10 * time.Second,
-				Id:        fmt.Sprintf("%s:%d", serverAddr, GrpcPort),
+				Name:        GrpcServiceName,
+				Addr:        serverAddr,
+				Port:        GrpcPort,
+				Protocol:    "grpc",
+				HealthCheck: fmt.Sprintf("%s:%d/Health", serverAddr, GrpcPort),
+				Tags:        []string{"dev"},
+				Interval:    5 * time.Second,
+				Weight:      100,
+				Timeout:     10 * time.Second,
+				Id:          fmt.Sprintf("%s:%d", serverAddr, GrpcPort),
 			},
 		},
 	}

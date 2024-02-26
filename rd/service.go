@@ -12,7 +12,7 @@ import (
 )
 
 type RDClient interface {
-	Register(s *models.ServiceNode) error
+	Register(s *config.RegisterNode) error
 	Deregister()
 	Watch(s *config.DiscoveryNode) error
 	GetService(name string, clientIp string) (*models.ServiceNode, error)
@@ -36,7 +36,7 @@ func NewRDClient(cfg *config.Config, logger *zap.SugaredLogger) (client RDClient
 	if err != nil {
 		return
 	}
-	for _, rs := range cfg.ServiceNodes {
+	for _, rs := range cfg.Registers {
 		err = client.Register(rs)
 		if err != nil {
 			return

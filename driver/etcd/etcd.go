@@ -21,7 +21,7 @@ import (
 type EtcdClient struct {
 	client             *clientv3.Client
 	rwmutex            sync.RWMutex
-	registered         map[string]*models.ServiceNode
+	registered         map[string]*config.RegisterNode
 	discovered         map[string][]*models.ServiceNode //已发现的服务
 	logger             *zap.SugaredLogger
 	schedulingHandlers map[string]scheduling.SchedulingHandler
@@ -36,13 +36,13 @@ func NewClient(cfg *clientv3.Config, logger *zap.SugaredLogger) (*EtcdClient, er
 		client:             client,
 		rwmutex:            sync.RWMutex{},
 		discovered:         make(map[string][]*models.ServiceNode),
-		registered:         make(map[string]*models.ServiceNode),
+		registered:         make(map[string]*config.RegisterNode),
 		logger:             logger,
 		schedulingHandlers: make(map[string]scheduling.SchedulingHandler),
 	}, nil
 }
 
-func (c *EtcdClient) Register(s *models.ServiceNode) error {
+func (c *EtcdClient) Register(s *config.RegisterNode) error {
 	var err error
 	go func() {
 		kv := clientv3.NewKV(c.client)

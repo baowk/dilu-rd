@@ -16,7 +16,7 @@ import (
 type ConsulClient struct {
 	client             *api.Client
 	rwmutex            sync.RWMutex
-	registered         []*models.ServiceNode
+	registered         []*config.RegisterNode
 	discovered         map[string][]*models.ServiceNode //已发现的服务
 	logger             *zap.SugaredLogger
 	schedulingHandlers map[string]scheduling.SchedulingHandler
@@ -31,13 +31,13 @@ func NewClient(cfg *api.Config, logger *zap.SugaredLogger) (*ConsulClient, error
 		client:             client,
 		rwmutex:            sync.RWMutex{},
 		discovered:         make(map[string][]*models.ServiceNode),
-		registered:         make([]*models.ServiceNode, 0),
+		registered:         make([]*config.RegisterNode, 0),
 		logger:             logger,
 		schedulingHandlers: make(map[string]scheduling.SchedulingHandler),
 	}, nil
 }
 
-func (c *ConsulClient) Register(s *models.ServiceNode) error {
+func (c *ConsulClient) Register(s *config.RegisterNode) error {
 	meta := map[string]string{
 		"protocol": string(s.Protocol),
 	}
@@ -51,7 +51,7 @@ func (c *ConsulClient) Register(s *models.ServiceNode) error {
 		Meta:      meta,
 	}
 	var check *api.AgentServiceCheck
-	if s.HealthUrl != "" {
+	if s.HealthCheck != "" {
 		if s.Timeout <= 0 {
 			s.Timeout = time.Duration(10) * time.Second
 		}
@@ -63,9 +63,9 @@ func (c *ConsulClient) Register(s *models.ServiceNode) error {
 			Interval: s.Interval.String(),
 		}
 		if s.Protocol == "http" {
-			check.HTTP = s.HealthUrl
+			check.HTTP = s.HealthCheck
 		} else if s.Protocol == "grpc" {
-			check.GRPC = s.HealthUrl
+			check.GRPC = s.HealthCheck
 		}
 		r.Check = check
 	}
@@ -140,7 +140,7 @@ func (c *ConsulClient) putServiceNode(s *config.DiscoveryNode, entry *api.Servic
 				found = true
 				v.Addr = entry.Service.Address
 				v.Port = entry.Service.Port
-				v.Protocol = models.Protocol(entry.Service.Meta["protocol"])
+				v.Protocol = entry.Service.Meta["protocol"]
 				v.Namespace = entry.Service.Namespace
 				v.Tags = entry.Service.Tags
 				v.SetEnable(true)
@@ -180,15 +180,18 @@ func (c *ConsulClient) delServiceNode(s *config.DiscoveryNode, entry *api.Servic
 }
 
 func (c *ConsulClient) entryToServiceNode(entry *api.ServiceEntry, s *config.DiscoveryNode) *models.ServiceNode {
-	n := models.ServiceNode{
+	r := config.RegisterNode{
 		Id:        entry.Service.ID,
 		Namespace: entry.Service.Namespace,
 		Name:      entry.Service.Service,
 		Tags:      entry.Service.Tags,
 		Addr:      entry.Service.Address,
 		Port:      entry.Service.Port,
-		Protocol:  models.Protocol(entry.Service.Meta["protocol"]),
+		Protocol:  entry.Service.Meta["protocol"],
 		FailLimit: s.FailLimit,
+	}
+	n := models.ServiceNode{
+		RegisterNode: r,
 	}
 	n.SetEnable(true)
 

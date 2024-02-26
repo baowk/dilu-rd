@@ -2,37 +2,17 @@ package models
 
 import (
 	"fmt"
-	"time"
 
+	"github.com/baowk/dilu-rd/config"
 	"google.golang.org/grpc"
 )
 
-type Protocol string
-
-const (
-	HTTP Protocol = "http"
-	GRPC Protocol = "grpc"
-
-// HTTPS Protocol = "https"
-)
-
 type ServiceNode struct {
-	Namespace string           //命名空间
-	Id        string           //服务id
-	Name      string           //服务名
-	Addr      string           //服务地址
-	Port      int              //端口
-	Protocol  Protocol         //协议
-	Weight    int              //权重
-	CurConns  int              //当前连接数
-	Interval  time.Duration    //检测间隔
-	Timeout   time.Duration    //服务检测超时时间
-	HealthUrl string           //健康检查地址
-	Tags      []string         //标签
-	failCnt   int              //失败次数
-	FailLimit int              //失败次数限制，到达失败次数就会被禁用
-	enable    bool             //是否启用
-	grpc      *grpc.ClientConn //grpc连接
+	config.RegisterNode                  //注册节点
+	Weight              int              //权重
+	failCnt             int              //失败次数
+	enable              bool             //是否启用
+	grpc                *grpc.ClientConn //grpc连接
 }
 
 func (n *ServiceNode) Enable() bool {
