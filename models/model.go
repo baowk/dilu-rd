@@ -29,7 +29,6 @@ func (n *ServiceNode) ClearFailCnt() {
 
 func (n *ServiceNode) IncrFailCnt() {
 	n.failCnt++
-	fmt.Println("service node fail limit*****************", n.failCnt, n.FailLimit)
 	if n.failCnt > n.FailLimit {
 		n.enable = false
 	}

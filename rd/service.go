@@ -1,6 +1,9 @@
 package rd
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/baowk/dilu-rd/config"
 	"github.com/baowk/dilu-rd/driver/consul"
 	"github.com/baowk/dilu-rd/driver/etcd"
@@ -37,6 +40,27 @@ func NewRDClient(cfg *config.Config, logger *zap.SugaredLogger) (client RDClient
 		return
 	}
 	for _, rs := range cfg.Registers {
+		if rs.Addr == "" || rs.Port <= 0 || rs.Port > 65535 {
+			panic("register node addr or port is error")
+		}
+		if rs.Protocol != "http" && rs.Protocol != "grpc" {
+			panic("register node protocol is error")
+		}
+		if rs.Name == "" {
+			panic("register node name is error")
+		}
+		if rs.Id == "" {
+			rs.Id = fmt.Sprintf("%s:%d", rs.Addr, rs.Port)
+		}
+		if rs.FailLimit <= 0 {
+			rs.FailLimit = 3
+		}
+		if rs.Interval <= 0 {
+			rs.Interval = time.Duration(5 * time.Second)
+		}
+		if rs.Timeout <= 0 {
+			rs.Timeout = time.Duration(10 * time.Second)
+		}
 		err = client.Register(rs)
 		if err != nil {
 			return

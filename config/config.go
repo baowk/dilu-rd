@@ -29,6 +29,34 @@ type RegisterNode struct {
 	FailLimit   int           `mapstructure:"fail-limit" json:"fail-limit" yaml:"fail-limit"`       //失败次数限制，到达失败次数就会被禁用
 }
 
+// func (e *RegisterNode) GetInterval() time.Duration {
+// 	if e.Interval == 0 {
+// 		return time.Second * 5
+// 	}
+// 	return e.Interval
+// }
+
+// func (e *RegisterNode) GetTimeout() time.Duration {
+// 	if e.Timeout == 0 {
+// 		return time.Second * 10
+// 	}
+// 	return e.Timeout
+// }
+
+// func (e *RegisterNode) GetId() string {
+// 	if e.Id == "" {
+// 		return fmt.Sprintf("%s:%d", e.Addr, e.Port)
+// 	}
+// 	return e.Id
+// }
+
+// func (e *RegisterNode) GetFailLimit() int {
+// 	if e.FailLimit == 0 {
+// 		return 3
+// 	}
+// 	return e.FailLimit
+// }
+
 type DiscoveryNode struct {
 	Enable              bool   `mapstructure:"enable" json:"enable" yaml:"enable"`                                           //启用发现
 	Namespace           string `mapstructure:"namespace" json:"namespace" yaml:"namespace"`                                  //命名空间

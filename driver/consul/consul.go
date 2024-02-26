@@ -52,12 +52,6 @@ func (c *ConsulClient) Register(s *config.RegisterNode) error {
 	}
 	var check *api.AgentServiceCheck
 	if s.HealthCheck != "" {
-		if s.Timeout <= 0 {
-			s.Timeout = time.Duration(10) * time.Second
-		}
-		if s.Interval <= 0 {
-			s.Interval = time.Duration(10) * time.Second
-		}
 		check = &api.AgentServiceCheck{
 			Timeout:  s.Timeout.String(),
 			Interval: s.Interval.String(),

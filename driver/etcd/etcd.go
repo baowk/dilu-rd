@@ -56,7 +56,6 @@ func (c *EtcdClient) Register(s *config.RegisterNode) error {
 					return
 				}
 				key := fmt.Sprintf("%s%d", s.Name, leaseResp.ID)
-				c.logger.Debug("key:", key)
 				b, err := json.Marshal(s)
 				if err != nil {
 					c.logger.Error(err)
