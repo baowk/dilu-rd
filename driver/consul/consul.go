@@ -53,8 +53,9 @@ func (c *ConsulClient) Register(s *config.RegisterNode) error {
 	var check *api.AgentServiceCheck
 	if s.HealthCheck != "" {
 		check = &api.AgentServiceCheck{
-			Timeout:  s.Timeout.String(),
-			Interval: s.Interval.String(),
+			Timeout:                        s.Timeout.String(),
+			Interval:                       s.Interval.String(),
+			DeregisterCriticalServiceAfter: (s.Timeout * 3).String(), //超过3倍超时时间，自动注销
 		}
 		if s.Protocol == "http" {
 			check.HTTP = s.HealthCheck
