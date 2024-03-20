@@ -2,19 +2,15 @@ package impl
 
 import (
 	"github.com/baowk/dilu-rd/models"
-
-	"go.uber.org/zap"
 )
 
 type RoundRobinHandler struct {
-	cur    map[string]int
-	logger *zap.SugaredLogger
+	cur map[string]int
 }
 
-func NewRoundRobinHandler(logger *zap.SugaredLogger) *RoundRobinHandler {
+func NewRoundRobinHandler() *RoundRobinHandler {
 	return &RoundRobinHandler{
-		cur:    make(map[string]int),
-		logger: logger,
+		cur: make(map[string]int),
 	}
 }
 

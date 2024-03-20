@@ -2,6 +2,7 @@ package consul
 
 import (
 	"errors"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/baowk/dilu-rd/scheduling"
 
 	"github.com/hashicorp/consul/api"
-	"go.uber.org/zap"
 )
 
 type ConsulClient struct {
@@ -18,11 +18,10 @@ type ConsulClient struct {
 	rwmutex            sync.RWMutex
 	registered         []*config.RegisterNode
 	discovered         map[string][]*models.ServiceNode //已发现的服务
-	logger             *zap.SugaredLogger
 	schedulingHandlers map[string]scheduling.SchedulingHandler
 }
 
-func NewClient(cfg *api.Config, logger *zap.SugaredLogger) (*ConsulClient, error) {
+func NewClient(cfg *api.Config) (*ConsulClient, error) {
 	client, err := api.NewClient(cfg)
 	if err != nil {
 		return nil, err
@@ -32,7 +31,6 @@ func NewClient(cfg *api.Config, logger *zap.SugaredLogger) (*ConsulClient, error
 		rwmutex:            sync.RWMutex{},
 		discovered:         make(map[string][]*models.ServiceNode),
 		registered:         make([]*config.RegisterNode, 0),
-		logger:             logger,
 		schedulingHandlers: make(map[string]scheduling.SchedulingHandler),
 	}, nil
 }
@@ -67,7 +65,7 @@ func (c *ConsulClient) Register(s *config.RegisterNode) error {
 
 	err := c.client.Agent().ServiceRegister(r)
 	if err != nil {
-		c.logger.Error("register err", zap.Error(err))
+		slog.Error("register err", err)
 		return err
 	}
 	c.registered = append(c.registered, s)
@@ -82,7 +80,7 @@ func (c *ConsulClient) Deregister() {
 
 func (c *ConsulClient) Watch(s *config.DiscoveryNode) error {
 	var lastIndex uint64 = 0
-	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm, c.logger)
+	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm)
 	go func(s *config.DiscoveryNode) {
 		for {
 			entries, qmeta, err := c.client.Health().Service(s.Name, s.Tag, false, &api.QueryOptions{
@@ -90,15 +88,15 @@ func (c *ConsulClient) Watch(s *config.DiscoveryNode) error {
 				WaitIndex: lastIndex,
 			})
 			if err != nil {
-				c.logger.Error("watch", zap.Error(err))
+				slog.Error("watch", err)
 				time.Sleep(time.Second * 1)
 				continue
 			}
 			lastIndex = qmeta.LastIndex
-			c.logger.Debug("watch", zap.Any("entries", entries), zap.Any("qmeta", qmeta))
+			slog.Debug("watch", "entries", entries, "qmeta", qmeta)
 			for _, entry := range entries {
 				status := entry.Checks.AggregatedStatus()
-				c.logger.Debug("watch", zap.Any("-------status--", status), zap.Any("entry.Service.ID--------", entry.Service.ID))
+				slog.Debug("watch", "-------status--", status, "entry.Service.ID--------", entry.Service.ID)
 				switch status {
 				case api.HealthPassing:
 					c.putServiceNode(s, entry)
@@ -131,7 +129,7 @@ func (c *ConsulClient) putServiceNode(s *config.DiscoveryNode, entry *api.Servic
 		found := false
 		for _, v := range vs {
 			if v.Id == entry.Service.ID {
-				c.logger.Debug("watch", zap.Any("update---", entry.Service.ID))
+				slog.Debug("watch", "update---", entry.Service.ID)
 				found = true
 				v.Addr = entry.Service.Address
 				v.Port = entry.Service.Port
@@ -144,13 +142,13 @@ func (c *ConsulClient) putServiceNode(s *config.DiscoveryNode, entry *api.Servic
 			}
 		}
 		if !found {
-			c.logger.Debug("watch", zap.Any("add reset---", entry.Service.ID))
+			slog.Debug("watch", "add reset---", entry.Service.ID)
 			ds := c.entryToServiceNode(entry, s)
 			vs = append(vs, ds)
 			c.discovered[s.Name] = vs
 		}
 	} else {
-		c.logger.Debug("watch", zap.Any("add 1---", entry.Service.ID))
+		slog.Debug("watch", "add 1---", entry.Service.ID)
 		ds := c.entryToServiceNode(entry, s)
 		c.discovered[s.Name] = []*models.ServiceNode{ds}
 	}
@@ -159,7 +157,7 @@ func (c *ConsulClient) putServiceNode(s *config.DiscoveryNode, entry *api.Servic
 func (c *ConsulClient) delServiceNode(s *config.DiscoveryNode, entry *api.ServiceEntry) {
 	c.rwmutex.Lock()
 	defer c.rwmutex.Unlock()
-	c.logger.Debug("watch", zap.Any("entry.Service.ID-----del---", entry.Service.ID))
+	slog.Debug("watch", "entry.Service.ID-----del---", entry.Service.ID)
 	if vs, ok := c.discovered[s.Name]; ok {
 		for i, v := range vs {
 			if v.Id == entry.Service.ID {
@@ -170,7 +168,7 @@ func (c *ConsulClient) delServiceNode(s *config.DiscoveryNode, entry *api.Servic
 		}
 		c.discovered[s.Name] = vs
 	} else {
-		c.logger.Debug("not found")
+		slog.Debug("not found")
 	}
 }
 

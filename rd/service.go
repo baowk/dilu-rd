@@ -11,7 +11,6 @@ import (
 
 	"github.com/hashicorp/consul/api"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
 )
 
 type RDClient interface {
@@ -21,20 +20,20 @@ type RDClient interface {
 	GetService(name string, clientIp string) (*models.ServiceNode, error)
 }
 
-func NewRDClient(cfg *config.Config, logger *zap.SugaredLogger) (client RDClient, err error) {
+func NewRDClient(cfg *config.Config) (client RDClient, err error) {
 	if cfg.Driver == "etcd" {
 		c := clientv3.Config{
 			Endpoints:   cfg.Endpoints,
 			DialTimeout: cfg.Timeout,
 		}
-		client, err = etcd.NewClient(&c, logger)
+		client, err = etcd.NewClient(&c)
 	} else if cfg.Driver == "consul" {
 		c := api.Config{
 			Address:  cfg.Endpoints[0],
 			Scheme:   cfg.Scheme,
 			WaitTime: cfg.Timeout,
 		}
-		client, err = consul.NewClient(&c, logger)
+		client, err = consul.NewClient(&c)
 	}
 	if err != nil {
 		return

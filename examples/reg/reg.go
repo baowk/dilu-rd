@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"github.com/baowk/dilu-rd/rd"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -35,32 +35,30 @@ func main() {
 
 	ips := GetLocalHost()
 
-	logger, _ := zap.NewDevelopment()
-
-	rdclient, err := rd.NewRDClient(cfg, logger.Sugar())
+	rdclient, err := rd.NewRDClient(cfg)
 	if err != nil {
-		logger.Debug("NewRDClient err:", zap.Error(err))
+		slog.Debug("NewRDClient err:", err)
 	}
 
-	logger.Debug("rdclient:", zap.Any("client", rdclient))
+	slog.Debug("rdclient:", "client", rdclient)
 
 	go func() { //grpc服务
 		lis, err := net.Listen("tcp", ":5001")
 		if err != nil {
-			logger.Error("failed to listen", zap.Error(err))
+			slog.Error("failed to listen", err)
 		}
 		s := grpc.NewServer()
 		health.RegisterHealthServer(s, &health.HealthServerImpl{})
 		service.RegisterGreeterServer(s, &impl.TempimplementedGreeterServer{})
 		fmt.Println("grpc server start", ips, "5001")
-		logger.Debug("grpc start:", zap.String("ip", ips), zap.Int("port", 5001))
+		slog.Debug("grpc start:", "ip", ips, "port", 5001)
 		err = s.Serve(lis)
 		if err != nil {
-			logger.Error("failed to serve", zap.Error(err))
+			slog.Error("failed to serve", err)
 		}
 	}()
 
-	logger.Debug("http start:", zap.String("ip", ips), zap.Int("port", 5000))
+	slog.Debug("http start:", "ip", ips, "port", 5000)
 
 	//服务启动参数
 	srv := &http.Server{
@@ -84,7 +82,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	logger.Info("Shutdown Server " + time.Now().String())
+	slog.Info("Shutdown Server " + time.Now().String())
 
 	rdclient.Deregister()
 

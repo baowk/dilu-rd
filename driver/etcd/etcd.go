@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
 )
 
 type EtcdClient struct {
@@ -23,11 +23,10 @@ type EtcdClient struct {
 	rwmutex            sync.RWMutex
 	registered         map[string]*config.RegisterNode
 	discovered         map[string][]*models.ServiceNode //已发现的服务
-	logger             *zap.SugaredLogger
 	schedulingHandlers map[string]scheduling.SchedulingHandler
 }
 
-func NewClient(cfg *clientv3.Config, logger *zap.SugaredLogger) (*EtcdClient, error) {
+func NewClient(cfg *clientv3.Config) (*EtcdClient, error) {
 	client, err := clientv3.New(*cfg)
 	if err != nil {
 		return nil, err
@@ -37,7 +36,6 @@ func NewClient(cfg *clientv3.Config, logger *zap.SugaredLogger) (*EtcdClient, er
 		rwmutex:            sync.RWMutex{},
 		discovered:         make(map[string][]*models.ServiceNode),
 		registered:         make(map[string]*config.RegisterNode),
-		logger:             logger,
 		schedulingHandlers: make(map[string]scheduling.SchedulingHandler),
 	}, nil
 }
@@ -52,25 +50,25 @@ func (c *EtcdClient) Register(s *config.RegisterNode) error {
 			if curLeaseId == 0 {
 				leaseResp, err := lease.Grant(context.TODO(), int64(s.Timeout.Seconds()))
 				if err != nil {
-					c.logger.Error(err)
+					slog.Error("Grant err", err)
 					return
 				}
 				key := fmt.Sprintf("%s%d", s.Name, leaseResp.ID)
 				b, err := json.Marshal(s)
 				if err != nil {
-					c.logger.Error(err)
+					slog.Error("json marshal err", err)
 				}
 				if _, err := kv.Put(context.TODO(), key, string(b), clientv3.WithLease(clientv3.LeaseID(leaseResp.ID))); err != nil {
-					c.logger.Error(err)
+					slog.Error("put err", err)
 					return
 				}
 				c.registered[key] = s
 				curLeaseId = clientv3.LeaseID(leaseResp.ID)
 			} else {
-				c.logger.Debug("key:", curLeaseId)
+				slog.Debug("key:", curLeaseId)
 				// 续约租约，如果租约已经过期将curLeaseId复位到0重新走创建租约的逻辑
 				if _, err := lease.KeepAliveOnce(context.TODO(), curLeaseId); err == rpctypes.ErrLeaseNotFound {
-					c.logger.Error(err)
+					slog.Error("keepalive err", err)
 					curLeaseId = 0
 					continue
 				}
@@ -94,7 +92,7 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 			kv := clientv3.NewKV(c.client)
 			rangeResp, err := kv.Get(context.TODO(), s.Name, clientv3.WithPrefix())
 			if err != nil {
-				c.logger.Error("GetKey err:", err)
+				slog.Error("GetKey err:", err)
 			}
 			for _, kv := range rangeResp.Kvs {
 				c.putServiceNode(kv.Value, s)
@@ -106,7 +104,7 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 		watchChan := watcher.Watch(context.TODO(), s.Name, clientv3.WithPrefix())
 		for watchResp := range watchChan {
 			for _, event := range watchResp.Events {
-				c.logger.Info("Events ", s.Name, string(event.Kv.Value))
+				slog.Info("Events ", s.Name, string(event.Kv.Value))
 				switch event.Type {
 				case mvccpb.PUT: //PUT事件，目录下有了新key
 					c.putServiceNode(event.Kv.Value, s)
@@ -122,17 +120,17 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 func (c *EtcdClient) putServiceNode(data []byte, s *config.DiscoveryNode) {
 	c.rwmutex.Lock()
 	defer c.rwmutex.Unlock()
-	c.logger.Debug("-----put ", s.Name, string(data))
+	slog.Debug("-----put ", s.Name, string(data))
 	var rs models.ServiceNode
 	err := json.Unmarshal(data, &rs)
 	if err != nil {
-		c.logger.Error("unmarshal err", err)
+		slog.Error("unmarshal err", err)
 	}
 	if vs, ok := c.discovered[s.Name]; ok {
 		found := false
 		for _, v := range vs {
 			if v.Id == rs.Id {
-				c.logger.Debug("-----update ", s.Name, rs)
+				slog.Debug("-----update ", s.Name, rs)
 				v.Addr = rs.Addr
 				v.Port = rs.Port
 				v.Tags = rs.Tags
@@ -146,29 +144,29 @@ func (c *EtcdClient) putServiceNode(data []byte, s *config.DiscoveryNode) {
 			}
 		}
 		if !found {
-			c.logger.Debug("-----add other ", s.Name, rs)
+			slog.Debug("-----add other ", s.Name, rs)
 			rs.SetEnable(true)
 			rs.ClearFailCnt()
 			vs = append(vs, &rs)
 			c.discovered[s.Name] = vs
 		}
 	} else {
-		c.logger.Debug("-----add first", s.Name, rs)
+		slog.Debug("-----add first", s.Name, rs)
 		rs.SetEnable(true)
 		rs.ClearFailCnt()
 		c.discovered[s.Name] = []*models.ServiceNode{&rs}
 	}
-	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm, c.logger)
+	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm)
 }
 
 func (c *EtcdClient) delServiceNode(curId string, s *config.DiscoveryNode) {
 	c.rwmutex.RLock()
 	defer c.rwmutex.RUnlock()
-	c.logger.Debug("-----del ", s.Name, curId)
+	slog.Debug("-----del ", s.Name, curId)
 	if vs, ok := c.discovered[s.Name]; ok {
 		for i, v := range vs {
 			if v.Id == curId {
-				c.logger.Debug("-----del ", s.Name, curId)
+				slog.Debug("-----del ", s.Name, curId)
 				v.Close()
 				vs = append(vs[:i], vs[i+1:]...)
 				break
@@ -176,14 +174,14 @@ func (c *EtcdClient) delServiceNode(curId string, s *config.DiscoveryNode) {
 		}
 		c.discovered[s.Name] = vs
 	} else {
-		c.logger.Info("not found")
+		slog.Info("not found")
 	}
 }
 
 func (c *EtcdClient) GetService(name string, clientIp string) (*models.ServiceNode, error) {
 	c.rwmutex.RLock()
 	defer c.rwmutex.RUnlock()
-	c.logger.Debug("-----get ", name)
+	slog.Debug("-----get ", name)
 	if rs, ok := c.discovered[name]; ok && len(rs) > 0 {
 		if sh, ok := c.schedulingHandlers[name]; ok {
 			return sh.GetServiceNode(rs, name), nil

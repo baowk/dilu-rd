@@ -5,19 +5,15 @@ import (
 	"time"
 
 	"github.com/baowk/dilu-rd/models"
-
-	"go.uber.org/zap"
 )
 
 type RandomHandler struct {
-	r      *rand.Rand
-	logger *zap.SugaredLogger
+	r *rand.Rand
 }
 
-func NewRandomHandler(logger *zap.SugaredLogger) *RandomHandler {
+func NewRandomHandler() *RandomHandler {
 	return &RandomHandler{
-		r:      rand.New(rand.NewSource(time.Now().Unix())),
-		logger: logger,
+		r: rand.New(rand.NewSource(time.Now().Unix())),
 	}
 }
 

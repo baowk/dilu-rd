@@ -3,27 +3,25 @@ package scheduling
 import (
 	"github.com/baowk/dilu-rd/models"
 	"github.com/baowk/dilu-rd/scheduling/impl"
-
-	"go.uber.org/zap"
 )
 
 type SchedulingHandler interface {
 	GetServiceNode(nodes []*models.ServiceNode, name string) *models.ServiceNode
 }
 
-func GetHandler(algorithm string, logger *zap.SugaredLogger) SchedulingHandler {
+func GetHandler(algorithm string) SchedulingHandler {
 	algo := Algorithm(algorithm)
 	switch algo {
 	case AlgorithmRoundRobin:
-		return impl.NewRoundRobinHandler(logger)
+		return impl.NewRoundRobinHandler()
 	case AlgorithmRandom:
-		return impl.NewRandomHandler(logger)
+		return impl.NewRandomHandler()
 	// case AlgorithmWeightedRandom:
 	// 	return NewWeightedRandomHandler()
 	// case AlgorithmIpHash:
 	// 	return NewIpHashHandler()
 	default:
-		return impl.NewRoundRobinHandler(logger)
+		return impl.NewRoundRobinHandler()
 	}
 }
 

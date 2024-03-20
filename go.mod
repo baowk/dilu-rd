@@ -1,13 +1,12 @@
 module github.com/baowk/dilu-rd
 
-go 1.20
+go 1.22
 
 require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/hashicorp/consul/api v1.27.0
 	go.etcd.io/etcd/api/v3 v3.5.10
 	go.etcd.io/etcd/client/v3 v3.5.10
-	go.uber.org/zap v1.26.0
 	google.golang.org/grpc v1.59.0
 	google.golang.org/protobuf v1.32.0
 )

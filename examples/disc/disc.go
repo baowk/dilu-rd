@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -10,15 +11,12 @@ import (
 	"github.com/baowk/dilu-rd/grpc/pb/service"
 	"github.com/baowk/dilu-rd/models"
 	"github.com/baowk/dilu-rd/rd"
-
-	"go.uber.org/zap"
 )
 
 func main() {
 	cfg := config.GetDisConfig()
-	logger, _ := zap.NewDevelopment()
 
-	rdclient, err := rd.NewRDClient(cfg, logger.Sugar())
+	rdclient, err := rd.NewRDClient(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -26,55 +24,55 @@ func main() {
 		for i := 0; i < len(cfg.Discoveries); i++ {
 			rs, err := rdclient.GetService(cfg.Discoveries[i].Name, "")
 			if err != nil {
-				logger.Error("GetService", zap.Error(err))
+				slog.Error("GetService", err)
 				time.Sleep(time.Duration(3 * time.Second))
 				continue
 			}
 			if rs != nil {
-				logger.Info("service", zap.Any("name", *rs))
+				slog.Info("service", "name", *rs)
 				if rs.Protocol == "http" {
-					httpPing(rs, logger.Sugar())
+					httpPing(rs)
 				} else {
-					grpcSayHello(rs, logger.Sugar())
+					grpcSayHello(rs)
 				}
 			} else {
-				logger.Error("no service", zap.Any("name", cfg.Discoveries[0].Name))
+				slog.Error("no service", "name", cfg.Discoveries[0].Name)
 			}
 		}
 		time.Sleep(time.Duration(800 * time.Millisecond))
 	}
 }
 
-func httpPing(rs *models.ServiceNode, logger *zap.SugaredLogger) {
+func httpPing(rs *models.ServiceNode) {
 	url := rs.GetUrl() + "/ping"
 	resp, err := http.Get(url)
 	if err != nil {
 		rs.IncrFailCnt()
-		logger.Error(err)
+		slog.Error("ping err", err)
 		return
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Error(err)
+		slog.Error("err", err)
 		return
 	}
-	logger.Info(string(b))
+	slog.Info(string(b))
 }
 
-func grpcSayHello(rs *models.ServiceNode, logger *zap.SugaredLogger) {
+func grpcSayHello(rs *models.ServiceNode) {
 	conn, err := rs.GetGrpcConn()
 	if err != nil {
-		logger.Error("get conn", zap.Error(err))
+		slog.Error("get conn", err)
 		return
 	}
 	c := service.NewGreeterClient(conn)
 
 	r, err := c.SayHello(context.Background(), &service.HelloRequest{Name: "walker"})
 	if err != nil {
-		logger.Error("could not greet", zap.Error(err))
+		slog.Error("could not greet", err)
 		rs.IncrFailCnt()
 		return
 	}
-	logger.Info("Greeting: ", zap.String("msg", r.Message))
+	slog.Info("Greeting: ", "msg", r.Message)
 }
