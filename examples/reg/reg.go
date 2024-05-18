@@ -37,7 +37,7 @@ func main() {
 
 	rdclient, err := rd.NewRDClient(cfg)
 	if err != nil {
-		slog.Debug("NewRDClient err:", err)
+		slog.Debug("NewRDClient", "err", err)
 	}
 
 	slog.Debug("rdclient:", "client", rdclient)
@@ -45,7 +45,7 @@ func main() {
 	go func() { //grpc服务
 		lis, err := net.Listen("tcp", ":5001")
 		if err != nil {
-			slog.Error("failed to listen", err)
+			slog.Error("failed to listen", "err", err)
 		}
 		s := grpc.NewServer()
 		health.RegisterHealthServer(s, &health.HealthServerImpl{})
@@ -54,7 +54,7 @@ func main() {
 		slog.Debug("grpc start:", "ip", ips, "port", 5001)
 		err = s.Serve(lis)
 		if err != nil {
-			slog.Error("failed to serve", err)
+			slog.Error("failed to serve", "err", err)
 		}
 	}()
 
