@@ -65,7 +65,7 @@ func (c *ConsulClient) Register(s *config.RegisterNode) error {
 
 	err := c.client.Agent().ServiceRegister(r)
 	if err != nil {
-		slog.Error("register err", err)
+		slog.Error("register", "err", err)
 		return err
 	}
 	c.registered = append(c.registered, s)
@@ -88,7 +88,7 @@ func (c *ConsulClient) Watch(s *config.DiscoveryNode) error {
 				WaitIndex: lastIndex,
 			})
 			if err != nil {
-				slog.Error("watch", err)
+				slog.Error("watch", "err", err)
 				time.Sleep(time.Second * 1)
 				continue
 			}

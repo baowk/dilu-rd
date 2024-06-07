@@ -8,7 +8,7 @@ require (
 	go.etcd.io/etcd/api/v3 v3.5.10
 	go.etcd.io/etcd/client/v3 v3.5.10
 	google.golang.org/grpc v1.59.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.34.1
 )
 
 require (

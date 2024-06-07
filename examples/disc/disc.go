@@ -24,7 +24,7 @@ func main() {
 		for i := 0; i < len(cfg.Discoveries); i++ {
 			rs, err := rdclient.GetService(cfg.Discoveries[i].Name, "")
 			if err != nil {
-				slog.Error("GetService", err)
+				slog.Error("GetService", "err", err)
 				time.Sleep(time.Duration(3 * time.Second))
 				continue
 			}
@@ -48,13 +48,13 @@ func httpPing(rs *models.ServiceNode) {
 	resp, err := http.Get(url)
 	if err != nil {
 		rs.IncrFailCnt()
-		slog.Error("ping err", err)
+		slog.Error("ping err", "err", err)
 		return
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Error("err", err)
+		slog.Error("readall", "err", err)
 		return
 	}
 	slog.Info(string(b))
@@ -63,14 +63,14 @@ func httpPing(rs *models.ServiceNode) {
 func grpcSayHello(rs *models.ServiceNode) {
 	conn, err := rs.GetGrpcConn()
 	if err != nil {
-		slog.Error("get conn", err)
+		slog.Error("get conn", "err", err)
 		return
 	}
 	c := service.NewGreeterClient(conn)
 
 	r, err := c.SayHello(context.Background(), &service.HelloRequest{Name: "walker"})
 	if err != nil {
-		slog.Error("could not greet", err)
+		slog.Error("could not greet", "err", err)
 		rs.IncrFailCnt()
 		return
 	}
