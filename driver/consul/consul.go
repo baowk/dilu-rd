@@ -76,6 +76,7 @@ func (c *ConsulClient) Deregister() {
 	for _, r := range c.registered {
 		c.client.Agent().ServiceDeregister(r.Id)
 	}
+	c.registered = c.registered[:0]
 }
 
 func (c *ConsulClient) Watch(s *config.DiscoveryNode) error {

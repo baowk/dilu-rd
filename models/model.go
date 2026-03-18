@@ -5,6 +5,7 @@ import (
 
 	"github.com/baowk/dilu-rd/config"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type ServiceNode struct {
@@ -42,30 +43,17 @@ func (n *ServiceNode) GetUrl() string {
 	return fmt.Sprintf("%s://%s:%d", n.Protocol, n.Addr, n.Port)
 }
 
-// func (n *ServiceNode) GetHttpClient() (*http.Client, error) {
-// 	//http.NewClient(fmt.Sprintf("%s://%s:%d", n.Protocol, n.Addr, n.Port))
-// 	return nil, nil
-// }
-
 func (n *ServiceNode) GetGrpcConn() (conn *grpc.ClientConn, err error) {
 	if n.grpc != nil {
 		conn = n.grpc
 	} else {
-		conn, err = grpc.Dial(fmt.Sprintf("%s:%d", n.Addr, n.Port), grpc.WithInsecure())
+		conn, err = grpc.NewClient(fmt.Sprintf("%s:%d", n.Addr, n.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			n.grpc = conn
 		}
 	}
 	return
 }
-
-// func (n *ServiceNode) GetRpcConn() (*rpc.Client, error) {
-// 	if n.Protocol == "tcp" {
-// 		return rpc.Dial(n.Protocol, fmt.Sprintf("%s:%d", n.Addr, n.Port))
-// 	} else {
-// 		return rpc.DialHTTP(n.Protocol, fmt.Sprintf("%s:%d", n.Addr, n.Port))
-// 	}
-// }
 
 func (n *ServiceNode) Close() {
 	n.enable = false

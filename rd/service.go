@@ -34,19 +34,21 @@ func NewRDClient(cfg *config.Config) (client RDClient, err error) {
 			WaitTime: cfg.Timeout,
 		}
 		client, err = consul.NewClient(&c)
+	} else {
+		return nil, fmt.Errorf("unsupported driver: %s", cfg.Driver)
 	}
 	if err != nil {
 		return
 	}
 	for _, rs := range cfg.Registers {
 		if rs.Addr == "" || rs.Port <= 0 || rs.Port > 65535 {
-			panic("register node addr or port is error")
+			return nil, fmt.Errorf("register node addr or port is invalid: addr=%s, port=%d", rs.Addr, rs.Port)
 		}
 		if rs.Protocol != "http" && rs.Protocol != "grpc" {
-			panic("register node protocol is error")
+			return nil, fmt.Errorf("register node protocol is invalid: %s", rs.Protocol)
 		}
 		if rs.Name == "" {
-			panic("register node name is error")
+			return nil, fmt.Errorf("register node name is empty")
 		}
 		if rs.Id == "" {
 			rs.Id = fmt.Sprintf("%s:%d", rs.Addr, rs.Port)
