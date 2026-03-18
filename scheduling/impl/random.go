@@ -17,7 +17,7 @@ func NewRandomHandler() *RandomHandler {
 	}
 }
 
-func (rh *RandomHandler) GetServiceNode(nodes []*models.ServiceNode, name string) *models.ServiceNode {
+func (rh *RandomHandler) GetServiceNode(nodes []*models.ServiceNode, name string, _ string) *models.ServiceNode {
 	if len(nodes) == 0 {
 		return nil
 	}

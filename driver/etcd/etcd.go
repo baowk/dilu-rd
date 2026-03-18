@@ -200,7 +200,7 @@ func (c *EtcdClient) GetService(name string, clientIp string) (*models.ServiceNo
 	slog.Debug("-----get ", name)
 	if rs, ok := c.discovered[name]; ok && len(rs) > 0 {
 		if sh, ok := c.schedulingHandlers[name]; ok {
-			return sh.GetServiceNode(rs, name), nil
+			return sh.GetServiceNode(rs, name, clientIp), nil
 		}
 	}
 	return nil, errors.New("no service")

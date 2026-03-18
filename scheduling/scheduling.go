@@ -6,7 +6,7 @@ import (
 )
 
 type SchedulingHandler interface {
-	GetServiceNode(nodes []*models.ServiceNode, name string) *models.ServiceNode
+	GetServiceNode(nodes []*models.ServiceNode, name string, clientIP string) *models.ServiceNode
 }
 
 func GetHandler(algorithm string) SchedulingHandler {
@@ -16,10 +16,10 @@ func GetHandler(algorithm string) SchedulingHandler {
 		return impl.NewRoundRobinHandler()
 	case AlgorithmRandom:
 		return impl.NewRandomHandler()
-	// case AlgorithmWeightedRandom:
-	// 	return NewWeightedRandomHandler()
-	// case AlgorithmIpHash:
-	// 	return NewIpHashHandler()
+	case AlgorithmWeighted:
+		return impl.NewWeightedRobinHandler()
+	case AlgorithmIpHash:
+		return impl.NewIpHashHandler()
 	default:
 		return impl.NewRoundRobinHandler()
 	}
@@ -30,8 +30,8 @@ type Algorithm string
 const (
 	AlgorithmRandom     Algorithm = "random"
 	AlgorithmRoundRobin Algorithm = "robin"
-	// AlgorithmWeightedRandom Algorithm = "weight"
-	// AlgorithmIpHash         Algorithm = "iphash"
+	AlgorithmWeighted   Algorithm = "weight"
+	AlgorithmIpHash     Algorithm = "iphash"
 )
 
 func GetAlgorithm(name string) Algorithm {
@@ -40,10 +40,10 @@ func GetAlgorithm(name string) Algorithm {
 		return AlgorithmRandom
 	case "robin":
 		return AlgorithmRoundRobin
-	// case "weight":
-	// 	return AlgorithmWeightedRandom
-	// case "iphash":
-	// 	return AlgorithmIpHash
+	case "weight":
+		return AlgorithmWeighted
+	case "iphash":
+		return AlgorithmIpHash
 	default:
 		return AlgorithmRandom
 	}

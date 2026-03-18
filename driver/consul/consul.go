@@ -117,7 +117,7 @@ func (c *ConsulClient) GetService(name string, clientIp string) (*models.Service
 	defer c.rwmutex.RUnlock()
 	if rs, ok := c.discovered[name]; ok && len(rs) > 0 {
 		if sh, ok := c.schedulingHandlers[name]; ok {
-			return sh.GetServiceNode(rs, name), nil
+			return sh.GetServiceNode(rs, name, clientIp), nil
 		}
 	}
 	return nil, errors.New("no service")
