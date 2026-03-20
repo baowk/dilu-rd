@@ -74,14 +74,24 @@ func (c *ConsulClient) Register(s *config.RegisterNode) error {
 
 func (c *ConsulClient) Deregister() {
 	for _, r := range c.registered {
-		c.client.Agent().ServiceDeregister(r.Id)
+		if err := c.client.Agent().ServiceDeregister(r.Id); err != nil {
+			slog.Error("deregister", "id", r.Id, "err", err)
+		}
 	}
 	c.registered = c.registered[:0]
 }
 
+func (c *ConsulClient) Close() error {
+	c.Deregister()
+	// consul api.Client 无 Close 方法，连接由 HTTP transport 管理
+	return nil
+}
+
 func (c *ConsulClient) Watch(s *config.DiscoveryNode) error {
 	var lastIndex uint64 = 0
+	c.rwmutex.Lock()
 	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm)
+	c.rwmutex.Unlock()
 	go func(s *config.DiscoveryNode) {
 		for {
 			entries, qmeta, err := c.client.Health().Service(s.Name, s.Tag, false, &api.QueryOptions{

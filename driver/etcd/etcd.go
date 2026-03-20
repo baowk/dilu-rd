@@ -62,7 +62,7 @@ func (c *EtcdClient) Register(s *config.RegisterNode) error {
 					slog.Error("Grant err", "error", err)
 					return
 				}
-				key := fmt.Sprintf("%s%d", s.Name, leaseResp.ID)
+				key := fmt.Sprintf("%s/%d", s.Name, leaseResp.ID)
 				b, err := json.Marshal(s)
 				if err != nil {
 					slog.Error("json marshal err", "error", err)
@@ -72,7 +72,9 @@ func (c *EtcdClient) Register(s *config.RegisterNode) error {
 					slog.Error("put err", "error", err)
 					return
 				}
+				c.rwmutex.Lock()
 				c.registered[key] = s
+				c.rwmutex.Unlock()
 				curLeaseId = clientv3.LeaseID(leaseResp.ID)
 			} else {
 				slog.Debug("keepalive", "leaseId", curLeaseId)
@@ -97,10 +99,17 @@ func (c *EtcdClient) Deregister() {
 	kv := clientv3.NewKV(c.client)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	c.rwmutex.Lock()
 	for k := range c.registered {
 		kv.Delete(ctx, k)
 	}
 	c.registered = make(map[string]*config.RegisterNode)
+	c.rwmutex.Unlock()
+}
+
+func (c *EtcdClient) Close() error {
+	c.Deregister()
+	return c.client.Close()
 }
 
 func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
