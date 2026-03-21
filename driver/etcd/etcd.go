@@ -24,6 +24,7 @@ type EtcdClient struct {
 	registered         map[string]*config.RegisterNode
 	discovered         map[string][]*models.ServiceNode //已发现的服务
 	schedulingHandlers map[string]scheduling.SchedulingHandler
+	keyToId            map[string]string // etcd key -> service node Id
 	cancel             context.CancelFunc
 	ctx                context.Context
 }
@@ -39,6 +40,7 @@ func NewClient(cfg *clientv3.Config) (*EtcdClient, error) {
 		rwmutex:            sync.RWMutex{},
 		discovered:         make(map[string][]*models.ServiceNode),
 		registered:         make(map[string]*config.RegisterNode),
+		keyToId:            make(map[string]string),
 		schedulingHandlers: make(map[string]scheduling.SchedulingHandler),
 		ctx:                ctx,
 		cancel:             cancel,
@@ -122,6 +124,7 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 		}
 		for _, kv := range rangeResp.Kvs {
 			c.putServiceNode(kv.Value, s)
+			c.recordKeyId(string(kv.Key), kv.Value)
 		}
 
 		watcher := clientv3.NewWatcher(c.client)
@@ -133,8 +136,9 @@ func (c *EtcdClient) Watch(s *config.DiscoveryNode) error {
 				switch event.Type {
 				case mvccpb.PUT:
 					c.putServiceNode(event.Kv.Value, s)
+					c.recordKeyId(string(event.Kv.Key), event.Kv.Value)
 				case mvccpb.DELETE:
-					c.delServiceNode(string(event.Kv.Key), s)
+					c.delServiceNodeByKey(string(event.Kv.Key), s)
 				}
 			}
 		}
@@ -182,6 +186,30 @@ func (c *EtcdClient) putServiceNode(data []byte, s *config.DiscoveryNode) {
 		c.discovered[s.Name] = []*models.ServiceNode{&rs}
 	}
 	c.schedulingHandlers[s.Name] = scheduling.GetHandler(s.SchedulingAlgorithm)
+}
+
+func (c *EtcdClient) recordKeyId(key string, data []byte) {
+	var rs models.ServiceNode
+	if err := json.Unmarshal(data, &rs); err != nil {
+		return
+	}
+	c.rwmutex.Lock()
+	c.keyToId[key] = rs.Id
+	c.rwmutex.Unlock()
+}
+
+func (c *EtcdClient) delServiceNodeByKey(key string, s *config.DiscoveryNode) {
+	c.rwmutex.RLock()
+	nodeId, ok := c.keyToId[key]
+	c.rwmutex.RUnlock()
+	if !ok {
+		slog.Warn("delete unknown key", "key", key)
+		return
+	}
+	c.delServiceNode(nodeId, s)
+	c.rwmutex.Lock()
+	delete(c.keyToId, key)
+	c.rwmutex.Unlock()
 }
 
 func (c *EtcdClient) delServiceNode(curId string, s *config.DiscoveryNode) {
