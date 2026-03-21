@@ -97,7 +97,7 @@ func (c *EtcdClient) Register(s *config.RegisterNode) error {
 }
 
 func (c *EtcdClient) Deregister() {
-	c.cancel()
+	// 先删除注册的 key，再 cancel context 关闭 goroutine
 	kv := clientv3.NewKV(c.client)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -107,6 +107,7 @@ func (c *EtcdClient) Deregister() {
 	}
 	c.registered = make(map[string]*config.RegisterNode)
 	c.rwmutex.Unlock()
+	c.cancel()
 }
 
 func (c *EtcdClient) Close() error {
